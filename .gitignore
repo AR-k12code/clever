@@ -1,0 +1,5 @@
+settings.ps1
+*.sqlite
+downloads/*
+files/*
+*.csv
