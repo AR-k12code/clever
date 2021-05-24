@@ -3,11 +3,24 @@
 
 Clever Automation Script
 Craig Millsap
+Gentry Public Schools
+ ___ _____ ___  ___   ___   ___    _  _  ___ _____         
+/ __|_   _/ _ \| _ \ |   \ / _ \  | \| |/ _ \_   _|        
+\__ \ | || (_) |  _/ | |) | (_) | | .` | (_) || |          
+|___/ |_| \___/|_|   |___/ \___/  |_|\_|\___/ |_|
+
+ ___ ___ ___ _____   _____ _  _ ___ ___   ___ ___ _    ___ 
+| __|   \_ _|_   _| |_   _| || |_ _/ __| | __|_ _| |  | __|
+| _|| |) | |  | |     | | | __ || |\__ \ | _| | || |__| _| 
+|___|___/___| |_|     |_| |_||_|___|___/ |_| |___|____|___|
+   
+Please see https://github.com/AR-k12code/clever for more information.
 
 During testing of this script I highly suggest you pause your sync @ https://schools.clever.com/sync/settings
 
 This script assumes you have the CognosDefaults.ps1 file properly configured.
-This script does not attempt to fix your student email addresses. That process is included in the eSchoolUpload project.
+This script does not attempt to fix your student email addresses. That process is included in the eSchoolUpload project and would
+need to be run prior to this script.
 
 #>
 
@@ -216,7 +229,7 @@ try {
     IF ($exec.ExitCode -ge 1) { Throw }
 } catch {
     write-Host "ERROR: Failed to properly upload files to clever." -ForegroundColor RED
-    exit(1)
+    exit(3)
 }
 
 exit

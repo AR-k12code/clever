@@ -31,7 +31,7 @@ Copy-Item sample_settings.ps1 settings.ps1
 You will need to configure your Clever username and password. You can get that information from ````https://schools.clever.com/sync/settings````.
 
 ## Run
-Since this script is not trying to fix email addresses it does not need to have access to Active Directory. It can be run without saving the password in Task Scheduler. However, it must be run under the same local Windows user that encrypted the password. Highly suggest this be a service account that will survive longer than you.
+Since this script is not trying to fix email addresses it does not need to have access to Active Directory. It can be run without saving the password in Task Scheduler. However, it must be run under the same local Windows user that encrypted the password for the CognosDownloader. I highly suggest this be a service account that will survive longer than you.
 
 Open a Powershell 7 window (pwsh.exe)
 ````
@@ -48,5 +48,9 @@ This must be done using the account you used to save your encrypted Cognos passw
 * Action: Start a Program.
     * Program/script = "pwsh.exe"
     * Add arguments = "-ExecutionPolicy bypass -File c:\scripts\clever\clever.ps1"
+
+
+## Still needing
+- [ ] Needs a lot more error control
 
 ### Profit
