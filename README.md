@@ -46,7 +46,7 @@ This must be done using the account you used to save your encrypted Cognos passw
 * New Basic Task
 * Name it, Daily (or more), Set Time. (Please choose an offset on minutes like 8:23am)
 * Action: Start a Program.
-    * Program/script = "pwsh.exe"
+    * Program/script = "c:\Program Files\PowerShell\7\pwsh.exe"
     * Add arguments = "-ExecutionPolicy bypass -File c:\scripts\clever\clever.ps1"
 
 
