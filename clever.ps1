@@ -38,6 +38,7 @@ try {
 #Check for Settings File
 if (-Not(Test-Path $PSScriptRoot\settings.ps1)) {
     write-host "Error: Failed to find the settings.ps1 file. You can use the sample_settings.ps1 file as an example." -ForegroundColor Red
+    exit(1)
 } else {
     . $PSScriptRoot\settings.ps1
 }
@@ -47,6 +48,10 @@ if (-Not(Test-Path $PSScriptRoot\..\CognosDownload.ps1)) {
     Write-Host "Error: Failed to find the CognosDownload.ps1 at c:\scripts\CognosDownload.ps1. Please follow the directions on the ARK12-Code Github for proper installation." -ForegroundColor Red
     exit(1)
 }
+
+#Required folders
+if (-Not(Test-Path "$PSScriptRoot\downloads")) { New-Item -Path $PSScriptRoot\downloads -ItemType directory }
+if (-Not(Test-Path "$PSScriptRoot\files")) { New-Item -Path $PSScriptRoot\files -ItemType directory }
 
 if ([int](Get-Date -Format MM) -ge 6) {
     $schoolyear = [int](Get-Date -Format yyyy) + 1
