@@ -24,6 +24,7 @@ need to be run prior to this script.
 
 #>
 
+Start-Transcript "$PSScriptRoot\clever-log.log" -Force
 $cleverhostkey = '76:0c:bb:e5:f7:df:97:c3:f2:77:0d:9a:2e:d7:92:18'
 
 #Check for SimplySQL Module

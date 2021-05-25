@@ -48,6 +48,7 @@ This must be done using the account you used to save your encrypted Cognos passw
 * Action: Start a Program.
     * Program/script = "c:\Program Files\PowerShell\7\pwsh.exe"
     * Add arguments = "-ExecutionPolicy bypass -File c:\scripts\clever\clever.ps1"
+    * Start in = "c:\scripts\clever"
 
 
 ## Still needing
