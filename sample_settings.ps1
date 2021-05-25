@@ -4,5 +4,5 @@
 $cleverusername = 'witty-pass-1234'
 $cleverpassword = 'wROPHubUbr3CRaswlqoV'
 
-# Do you want the script to attempt to build a full year schedule? If not, then it will pull the current term only. $False
-$full_schedule = $True
+# Do you want the script to pull the current term only for enrollments? Set to $True
+$current_term_only = $False

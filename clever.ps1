@@ -55,15 +55,42 @@ if ([int](Get-Date -Format MM) -ge 6) {
 }
 
 $reports = @{
-    'enrollments' = @{ 'parameters' = 'p_fake=fake'; 'reportname' = 'enrollments' } #You must make the API believe you have provided some prompts.
+    'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' } #You must make the API believe you have provided some prompts.
     'schools' = @{ 'parameters' = ''; 'reportname' = 'schools' }
     'sections' = @{ 'parameters' = "p_year=$schoolyear"; 'reportname' = 'sections' }
     'students' = @{ 'parameters' = ''; 'reportname' = 'students' }
     'teachers' = @{ 'parameters' = ''; 'reportname' = 'teachers' }
 }
 
-if ($full_schedule -eq $True) {
-    $reports.'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_allterms' }
+if ($current_term_only -eq $True) {
+    Write-Host "Info: Current term only specified. This requires the sections.csv file to find the current date."
+    
+    if (Test-Path $PSScriptRoot\downloads\sections.csv) {
+
+        #Open sections.csv and find the current term.
+        $sections = Import-Csv $PSScriptRoot\downloads\sections.csv
+        $term1 = $sections | Where-Object { $PSItem.Term_name -eq 1 } | Select-Object -Property Term_name,Term_start,Term_end -First 1
+        $term2 = $sections | Where-Object { $PSItem.Term_name -eq 2 } | Select-Object -Property Term_name,Term_start,Term_end -First 1
+        $term3 = $sections | Where-Object { $PSItem.Term_name -eq 3 } | Select-Object -Property Term_name,Term_start,Term_end -First 1
+        $term4 = $sections | Where-Object { $PSItem.Term_name -eq 4 } | Select-Object -Property Term_name,Term_start,Term_end -First 1
+    
+        $today = Get-Date
+        if (([Int]$(Get-Date -Format MM) -gt 7) -And ($today -le [datetime]$term1.Term_end)) {
+            $currentTerm = 1
+        } elseif (($today -gt [datetime]$term1.Term_end) -And ($today -le [datetime]$term2.Term_end)) {
+            $currentTerm = 2
+        } elseif (($today -gt [datetime]$term2.Term_end) -And ($today -le [datetime]$term3.Term_end)) {
+            $currentTerm = 3
+        } else {
+            $currentTerm = 4 #why do math when its the only option left?
+        }
+
+        Write-Host "Info: Pulling term $currentTerm for enrollments.csv"
+        $reports.'enrollments' = @{ 'parameters' = "p_mp=$currentTerm"; 'reportname' = 'enrollments' }
+    } else {
+        $sections_error = $True
+        Write-Host "Error: sections.csv not found. This could be because this is the first time you have ran this script. You will need to run the script again." -ForegroundColor Red
+    }
 }
 
 #Establish Session Only. Report parameter is required but we can provide a fake one for authentication only.
@@ -99,9 +126,22 @@ if (($failedJobs | Measure-Object).count -ge 1) {
     exit(2)
 }
 
-#If full schedule then we need to build the sql tables and match enrollment to sections.
-if ($full_schedule) {
 
+if ($sections_error) {
+    #we need to verify sections.csv file now exists and run again.
+    if (Test-Path $PSScriptRoot\downloads\sections.csv) {
+        Write-Host "Info: You must run this script again in order to pull the current term only for enrollments."
+        exit(0)
+    } else {
+        Write-Host "Error: You specified you want the current term only but you're missing the sections.csv file and it failed to download." -ForegroundColor Red
+        exit(1)
+    }
+}
+
+#If full schedule then we need to build the sql tables and match enrollment to sections.
+if ($current_term_only) {
+    Copy-Item $PSScriptRoot\downloads\enrollments.csv $PSScriptRoot\files\enrollments.csv -Force
+} else {
     $database = "$PSScriptRoot\database.sqlite"
 
     $sql_import = @"
@@ -213,9 +253,6 @@ drop table if exists sections_csv_import;
     Complete-SqlTransaction
 
     Invoke-SqlQuery -Query "SELECT School_id,Section_id,Student_id FROM enrollments" | ConvertTo-Csv -UseQuotes AsNeeded -NoTypeInformation | Out-File $PSScriptRoot\files\enrollments.csv -Force
-
-} else {
-    Copy-Item $PSScriptRoot\downloads\enrollments.csv $PSScriptRoot\files\enrollments.csv -Force
 }
 
 Copy-Item $PSScriptRoot\downloads\schools.csv $PSScriptRoot\files\schools.csv -Force
