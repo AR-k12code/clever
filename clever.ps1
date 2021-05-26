@@ -18,9 +18,9 @@ Please see https://github.com/AR-k12code/clever for more information.
 
 During testing of this script I highly suggest you pause your sync @ https://schools.clever.com/sync/settings
 
-This script assumes you have the CognosDefaults.ps1 file properly configured.
-This script does not attempt to fix your student email addresses. That process is included in the eSchoolUpload project and would
-need to be run prior to this script.
+This script requires you to have the CognosDefaults.ps1 file properly configured.
+This script does not attempt to fix your student email addresses. That process is included in the eSchoolUpload
+project and would need to be run prior to this script.
 
 #>
 
@@ -54,6 +54,7 @@ if (-Not(Test-Path $PSScriptRoot\..\CognosDownload.ps1)) {
 if (-Not(Test-Path "$PSScriptRoot\downloads")) { New-Item -Path $PSScriptRoot\downloads -ItemType directory }
 if (-Not(Test-Path "$PSScriptRoot\files")) { New-Item -Path $PSScriptRoot\files -ItemType directory }
 
+#Current school year for pulling sections
 if ([int](Get-Date -Format MM) -ge 6) {
     $schoolyear = [int](Get-Date -Format yyyy) + 1
 } else {
@@ -61,7 +62,7 @@ if ([int](Get-Date -Format MM) -ge 6) {
 }
 
 $reports = @{
-    'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' } #You must make the API believe you have provided some prompts.
+    'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' }
     'schools' = @{ 'parameters' = ''; 'reportname' = 'schools' }
     'sections' = @{ 'parameters' = "p_year=$schoolyear"; 'reportname' = 'sections' }
     'students' = @{ 'parameters' = ''; 'reportname' = 'students' }

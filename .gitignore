@@ -3,3 +3,4 @@ settings.ps1
 downloads/*
 files/*
 *.csv
+clever-log.log
