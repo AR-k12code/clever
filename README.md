@@ -7,6 +7,8 @@ You will need the CognosDownloader from ````https://github.com/AR-k12code/Cognos
 
 You will need to copy the CognosDefaults.ps1 to c:\scripts\CognosDefaults.ps1 and configure for your username and school database.
 
+**DO NOT INSTALL THESE SCRIPTS TO A DOMAIN CONTROLLER.** Create a dedicated VM running Windows Server 2019 or Windows 10 Pro 1809+ for your automation scripts.
+
 ## Requirements
 Git ````https://git-scm.com/download/win````
 
@@ -51,7 +53,13 @@ This must be done using the account you used to save your encrypted Cognos passw
     * Start in = "c:\scripts\clever"
 
 
-## Still needing
-- [ ] Needs a lot more error control
+## Troubleshooting
+Review the clever-log.log file.
+
+Delete the database.sqlite file and try again.
+
+Verify your username and password are correct in the settings.ps1 file.
+
+Report any other issues here on github.
 
 ### Profit
