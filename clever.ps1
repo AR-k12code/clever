@@ -82,7 +82,7 @@ if ($current_term_only -eq $True) {
         $term4 = $sections | Where-Object { $PSItem.Term_name -eq 4 } | Select-Object -Property Term_name,Term_start,Term_end -First 1
     
         $today = Get-Date
-        if (([Int]$(Get-Date -Format MM) -gt 7) -And ($today -le [datetime]$term1.Term_end)) {
+        if (([Int]$(Get-Date -Format MM) -ge 7) -And ($today -le [datetime]$term1.Term_end)) {
             $currentTerm = 1
         } elseif (($today -gt [datetime]$term1.Term_end) -And ($today -le [datetime]$term2.Term_end)) {
             $currentTerm = 2
