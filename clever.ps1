@@ -55,7 +55,7 @@ if (-Not(Test-Path "$PSScriptRoot\downloads")) { New-Item -Path $PSScriptRoot\do
 if (-Not(Test-Path "$PSScriptRoot\files")) { New-Item -Path $PSScriptRoot\files -ItemType directory }
 
 #Current school year for pulling sections
-if ([int](Get-Date -Format MM) -ge 6) {
+if ([int](Get-Date -Format MM) -ge 7) {
     $schoolyear = [int](Get-Date -Format yyyy) + 1
 } else {
     $schoolyear = [int](Get-Date -Format yyyy)
