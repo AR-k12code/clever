@@ -259,13 +259,27 @@ drop table if exists sections_csv_import;
 
     Complete-SqlTransaction
 
-    Invoke-SqlQuery -Query "SELECT School_id,Section_id,Student_id FROM enrollments" | ConvertTo-Csv -UseQuotes AsNeeded -NoTypeInformation | Out-File $PSScriptRoot\files\enrollments.csv -Force
+    Invoke-SqlQuery -Query "SELECT School_id,Section_id,Student_id FROM enrollments" | Export-Csv -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\enrollments.csv" -Force
+
+    #The group by should return the first Term_name in order.
+    #pull sections but only the current term or later.
+    $sections = Invoke-SqlQuery -Query "/* Pull current term first then terms greater than after*/
+    SELECT * FROM sections_csv_import WHERE Term_name = $currentTerm
+    UNION
+    SELECT * FROM sections_csv_import WHERE Term_name > $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name = $currentTerm)
+    GROUP BY Section_id"
+
+    #now I need here term_name -lt $currentTerm but not in $currentTerm and not in > currentTerm.
+    $sections += Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name < $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name >= $currentTerm) GROUP BY Section_id"
+
+    $sections | Export-CSV -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\sections.csv" -Force
+
 }
 
 Copy-Item $PSScriptRoot\downloads\schools.csv $PSScriptRoot\files\schools.csv -Force
 Copy-Item $PSScriptRoot\downloads\students.csv $PSScriptRoot\files\students.csv -Force
 Copy-Item $PSScriptRoot\downloads\teachers.csv $PSScriptRoot\files\teachers.csv -Force
-Copy-Item $PSScriptRoot\downloads\sections.csv $PSScriptRoot\files\sections.csv -Force
+#Copy-Item $PSScriptRoot\downloads\sections.csv $PSScriptRoot\files\sections.csv -Force
 
 try {
     Write-Host "Info: Uploading files to Clever..." -ForegroundColor YELLOW
