@@ -6,3 +6,6 @@ $cleverpassword = 'wROPHubUbr3CRaswlqoV'
 
 # Do you want the script to pull the current term only for enrollments? Set to $True
 $current_term_only = $False
+
+#Define the CognosConfig if you need to use other than default.
+#$CognosConfigName = 'SomethingElse'

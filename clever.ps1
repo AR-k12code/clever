@@ -45,8 +45,10 @@ if (-Not(Test-Path $PSScriptRoot\settings.ps1)) {
 }
 
 #Check that the Cognos Downloader has been properly installed.
-if (-Not(Test-Path $PSScriptRoot\..\CognosDownload.ps1)) {
-    Write-Host "Error: Failed to find the CognosDownload.ps1 at c:\scripts\CognosDownload.ps1. Please follow the directions on the ARK12-Code Github for proper installation." -ForegroundColor Red
+try {
+    Import-Module -Name CognosModule -ErrorAction STOP
+} catch {
+    Write-Error "Failed to find the CognosModule. https://github.com/AR-k12code/CognosModule Please follow the directions on the ARK12-Code Github for proper installation." -ForegroundColor Red
     exit(1)
 }
 
@@ -61,6 +63,17 @@ if ([int](Get-Date -Format MM) -ge 7) {
     $schoolyear = [int](Get-Date -Format yyyy)
 }
 
+#Establish Session Only. Report parameter is required but we can provide a fake one for authentication only.
+try {
+    if (-Not($CognosConfigName)) {
+        $CognosConfigName = "DefaultConfig"
+    }
+    Connect-ToCognos -ConfigName $CognosConfigName
+} catch {
+    Write-Error "Failed to authenticate to Cognos."
+    exit 1
+}
+
 $reports = @{
     'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' }
     'schools' = @{ 'parameters' = ''; 'reportname' = 'schools' }
@@ -69,23 +82,27 @@ $reports = @{
     'teachers' = @{ 'parameters' = ''; 'reportname' = 'teachers' }
 }
 
-#Establish Session Only. Report parameter is required but we can provide a fake one for authentication only.
-. $PSScriptRoot\..\CognosDownload.ps1 -report FAKE -EstablishSessionOnly
-
 $results = $reports.Keys | ForEach-Object -Parallel {
+    
     #report title
     $PSitem
     
     #pull in session to script block
-    $incomingsession = $using:session
+    $CognosSession = $using:CognosSession
+    $CognosDSN = $using:CognosDSN
+    $CognosProfile = $using:CognosProfile
+    $CognosUsername = $using:CognosUsername
     
     #Pull in properties for each hashtable key.
     $options = ($using:reports).$PSItem
 
     #Run Cognos Download using incoming options.
-    & $using:PSScriptRoot\..\CognosDownload.ps1 -report "$($options.reportname)" -cognosfolder "_Shared Data File Reports\Clever Files" -SessionEstablished -savepath "$using:PSScriptRoot\downloads" -reportparams "$($options.parameters)" -FileName "$($PSItem).csv" -ShowReportDetails -TrimCSVWhiteSpace -TeamContent
-
-    if ($LASTEXITCODE -ne 0) { throw }
+    try {
+        Save-CognosReport -report "$($options.reportname)" -cognosfolder "_Shared Data File Reports\Clever Files" -savepath "$using:PSScriptRoot\downloads" -reportparams "$($options.parameters)" -FileName "$($PSItem).csv" -TeamContent
+    } catch {
+        Write-Output "$PSItem"
+        throw
+    }
     
 } -AsJob -ThrottleLimit 5 | Wait-Job #Please don't overload the Cognos Server.
 
@@ -227,8 +244,12 @@ if ($current_term_only) {
         SELECT * FROM sections_csv_import WHERE Term_name > $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name = $currentTerm)
         GROUP BY Section_id"
 
-        #now I need here term_name -lt $currentTerm but not in $currentTerm and not in > currentTerm.
+    #now I need here term_name -lt $currentTerm but not in $currentTerm and not in > currentTerm.
     $sections += Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name < $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name >= $currentTerm) GROUP BY Section_id"
+
+    #What about schools that have Terms other than (1,2,3,4) we can't simply ignore them. We are seeing schools with up to 8 terms with names like "R1,R2,R3" or "A1,A2,A3".
+    #Temporary patch is to pull anything else in that isn't in 1,2,3,4.  However, it doesn't "fix" the problem.
+    $sections += Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name NOT IN (1,2,3,4)"
 
     $sections | Export-CSV -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\sections.csv" -Force
 }
@@ -238,6 +259,7 @@ Copy-Item $PSScriptRoot\downloads\students.csv $PSScriptRoot\files\students.csv 
 Copy-Item $PSScriptRoot\downloads\teachers.csv $PSScriptRoot\files\teachers.csv -Force
 
 try {
+    if ($SkipUpload) { exit 0 }
     Write-Host "Info: Uploading files to Clever..." -ForegroundColor YELLOW
     $exec = Start-Process -FilePath "$PSScriptRoot\bin\pscp.exe" -ArgumentList "-r -pw ""$cleverpassword"" -hostkey $cleverhostkey -batch $PSScriptRoot\files\ $($cleverusername)@sftp.clever.com:" -PassThru -Wait -NoNewWindow
     IF ($exec.ExitCode -ge 1) { Throw }

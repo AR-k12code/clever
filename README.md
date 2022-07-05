@@ -3,9 +3,7 @@
 
 This script will pull from a persistent folder in Cognos so you no longer have to manage the Cognos reports for yourself.
 
-You will need the CognosDownloader from ````https://github.com/AR-k12code/CognosDownloader````. Please follow the installation process in the Readme.
-
-You will need to copy the CognosDefaults.ps1 to c:\scripts\CognosDefaults.ps1 and configure for your username and school database.
+You will need the CognosModule from ````https://github.com/AR-k12code/CognosModule````. Please follow the installation process in the Readme.
 
 **DO NOT INSTALL THESE SCRIPTS TO A DOMAIN CONTROLLER.** Create a dedicated VM running Windows Server 2019 or Windows 10 Pro 1809+ for your automation scripts.
 
