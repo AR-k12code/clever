@@ -1,9 +1,10 @@
 #Requires -Version 7.1
+#Requires -Modules SimplySQL,CognosModule
 <#
 
 Clever Automation Script
 Craig Millsap
-Gentry Public Schools
+Gentry Public Schools/CAMTech Computer Services LLC
  ___ _____ ___  ___   ___   ___    _  _  ___ _____         
 / __|_   _/ _ \| _ \ |   \ / _ \  | \| |/ _ \_   _|        
 \__ \ | || (_) |  _/ | |) | (_) | | .` | (_) || |          
@@ -24,7 +25,9 @@ project and would need to be run prior to this script.
 
 #>
 
-try { Start-Transcript "$PSScriptRoot\clever-log.log" -Force } catch {}
+try { Start-Transcript "$PSScriptRoot\clever-log.log" -Force } catch {
+    Stop-Transcript; Start-Transcript "$PSScriptRoot\clever-log.log" -Force
+}
 $cleverhostkey = '76:0c:bb:e5:f7:df:97:c3:f2:77:0d:9a:2e:d7:92:18'
 
 #Check for SimplySQL Module
@@ -144,7 +147,7 @@ Invoke-SqlUpdate -Query '/* FINAL REVISION! */
       `School_id`	int(4),
       `Section_id` bigint(32),
       `Student_id` int(10),
-      `Terms`	int(4),
+      `Terms` TEXT,
       UNIQUE (`School_id`,`Section_id`,`Student_id`,`Terms`)
     );' | Out-Null
 
@@ -162,7 +165,7 @@ Complete-SqlTransaction
 Invoke-SqlUpdate -Query '/* I need the terms to be grouped together to query later. Make a copy of the sections table with all terms grouped together. */
     DROP TABLE IF EXISTS `sections_grouped`;
     CREATE TABLE `sections_grouped` (
-      `Terms` int(4),
+      `Terms` TEXT,
       `School_id` int(4),
       `Section_id` bigint(32),
       `Teacher_id` varchar(32),
@@ -199,60 +202,157 @@ Invoke-SqlUpdate -Query 'DROP TABLE IF EXISTS `enrollments`;
 
 Start-SqlTransaction
 
-Invoke-SqlUpdate -Query '/* This requires that teachers have an email address. This is on purpose for my district because of sections that are placeholders. */
+Invoke-SqlUpdate -Query '/* This copies enrollments for students who are enrolled for the entire class terms. */
       INSERT INTO `enrollments`
       SELECT `enrollments_grouped`.`School_id`, `enrollments_grouped`.`Section_id`, `enrollments_grouped`.`Student_id`
       FROM `enrollments_grouped`
       INNER JOIN `sections_grouped` ON `enrollments_grouped`.`Section_id` = `sections_grouped`.`Section_id` AND `enrollments_grouped`.`Terms` = `sections_grouped`.`Terms`
       ORDER BY `enrollments_grouped`.`Student_id`,`sections_grouped`.`Period`;' | Out-Null
-    
-$term1 = Invoke-SqlQuery -Query "SELECT Term_name,Term_start,Term_end FROM sections_csv_import WHERE Term_name = 1 LIMIT 1"
-$term2 = Invoke-SqlQuery -Query "SELECT Term_name,Term_start,Term_end FROM sections_csv_import WHERE Term_name = 2 LIMIT 1"
-$term3 = Invoke-SqlQuery -Query "SELECT Term_name,Term_start,Term_end FROM sections_csv_import WHERE Term_name = 3 LIMIT 1"
-$term4 = Invoke-SqlQuery -Query "SELECT Term_name,Term_start,Term_end FROM sections_csv_import WHERE Term_name = 4 LIMIT 1"
 
-$today = Get-Date
-if (([Int]$(Get-Date -Format MM) -gt 7) -And ($today -le [datetime]$term1.Term_end)) {
-    $currentTerm = 1
-} elseif (($today -gt [datetime]$term1.Term_end) -And ($today -le [datetime]$term2.Term_end)) {
-    $currentTerm = 2
-} elseif (($today -gt [datetime]$term2.Term_end) -And ($today -le [datetime]$term3.Term_end)) {
-    $currentTerm = 3
-} else {
-    $currentTerm = 4 #why do math when its the only option left?
+
+<#
+    Get the Terms for each building.
+#>
+
+# We need to find all of the current terms and insert them into the enrollments table.
+$dbTerms = Invoke-SqlQuery -Query "SELECT DISTINCT School_id,Term_name,Term_start,Term_end FROM sections_csv_import" | Select-Object -Property School_id,Term_name,Term_start,Term_end,
+@{ Name = "Start"; Expression = { (Get-Date $PSitem.Term_start) } },
+@{ Name = "End"; Expression = { (Get-Date $PSitem.Term_end) } } | Sort-Object -Property School_id,Start
+
+#if there is a term 1 with a date in the future then we need to exclude any older data.
+#This means new Master schedule has been defined. Maybe not for every campus but its time to move forward.
+if ($dbTerms | Where-Object { $PSItem.Term_name -eq 1 -and $PSItem.Start -gt (Get-Date).AddDays(-1) }) {
+    Write-Host "Info: New master schedule information available. Filtering to use new school year only."
+    $dbTerms = $dbTerms | Where-Object { $PSItem.Start -gt (Get-Date).AddDays(-1) }
 }
 
-Invoke-SqlUpdate -Query 'INSERT OR REPLACE INTO `enrollments`
-    SELECT School_id,Section_id,Student_id
-    FROM `enrollments_csv_import`
-    WHERE Marking_period = ',$currentTerm,'
-    ORDER BY Student_id' | Out-Null
+#we can order terms to find the current, future, then past by finding the ones with a future ending and then find the ones that have already ended.
+$terms = @()
+$terms += $dbTerms | Where-Object { $PSitem.End -gt (Get-Date) }
+$terms += $dbTerms | Where-Object { $PSitem.End -lt (Get-Date) }
+
+#digit terms only. (1,2,3,4,etc)
+$digitTerms = $terms | Where-Object { $psitem.Term_name -match "^\d+$" } | Group-Object -Property School_id -AsHashTable
+
+#prefixed terms. (A1,A2,A3,A4,R1,R2,R3,R4)
+$prefixTerms = @{}
+$terms | Where-Object { $psitem.Term_name -match "^\D\d+$" } | Select-Object *,@{ Name = "Prefix"; Expression = { ($PSitem.Term_name)[0]} } | Group-Object -Property School_id,Prefix | ForEach-Object { $prefixTerms.($PSitem.Name) = $PSitem.Group }
+
+<#
+    Deal with Enrollments
+#>
+
+$enrollmentsCurrentTermOnly = [System.Collections.ArrayList]@()
+
+$digitTerms.Keys | ForEach-Object {
+    $currentTerm = $digitTerms.($PSitem)[0]
+
+    Write-Host "Info: Inserting term $($currentTerm.'Term_name') ($($currentTerm.Term_start) - $($currentTerm.Term_end)) enrollments for $($currentTerm.'School_id')"
+    Invoke-SqlUpdate -Query "REPLACE INTO enrollments
+        SELECT
+            School_id,
+            Section_id,
+            Student_id
+        FROM enrollments_csv_import
+        WHERE School_id = $($currentTerm.School_id)
+        AND Marking_period = ""$($currentTerm.Term_name)"""
+
+    Invoke-SqlQuery -Query "SELECT
+            School_id,
+            Section_id,
+            Student_id
+        FROM enrollments_csv_import
+        WHERE School_id = $($currentTerm.School_id)
+        AND Marking_period = ""$($currentTerm.Term_name)""" | ForEach-Object {
+            $enrollmentsCurrentTermOnly.Add($PSitem) | Out-Null
+        }
+
+}
+
+$prefixTerms.Keys | ForEach-Object { 
+    $currentTerm = $prefixTerms.($PSitem)[0]
+
+    Write-Host "Info: Inserting term $($currentTerm.'Term_name') ($($currentTerm.Term_start) - $($currentTerm.Term_end)) enrollments for $($currentTerm.'School_id')"
+    Invoke-SqlUpdate -Query "REPLACE INTO enrollments
+        SELECT
+            School_id,
+            Section_id,
+            Student_id
+        FROM enrollments_csv_import
+        WHERE School_id = $($currentTerm.School_id)
+        AND Marking_period = ""$($currentTerm.Term_name)"""
+
+    Invoke-SqlQuery -Query "SELECT
+            School_id,
+            Section_id,
+            Student_id
+        FROM enrollments_csv_import
+        WHERE School_id = $($currentTerm.School_id)
+        AND Marking_period = ""$($currentTerm.Term_name)""" | ForEach-Object {
+            $enrollmentsCurrentTermOnly.Add($PSitem) | Out-Null
+        }
+
+}
 
 Complete-SqlTransaction
 
+
+Write-Host "Creating enrollments.csv file."
+
 if ($current_term_only) {
-    Invoke-SqlQuery -Query "SELECT School_id,Section_id,Student_id FROM enrollments_csv_import WHERE Marking_period = $currentTerm" | Export-Csv -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\enrollments.csv" -Force
-    Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name = $currentTerm" | Export-CSV -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\sections.csv" -Force
+    $enrollmentsCurrentTermOnly | Export-Csv -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\enrollments.csv" -Force
 } else {
     Invoke-SqlQuery -Query "SELECT School_id,Section_id,Student_id FROM enrollments" | Export-Csv -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\enrollments.csv" -Force
-
-    #The group by should return the first Term_name in order.
-    #pull sections but only the current term or later.
-    $sections = Invoke-SqlQuery -Query "/* Pull current term first then terms greater than after*/
-        SELECT * FROM sections_csv_import WHERE Term_name = $currentTerm
-        UNION
-        SELECT * FROM sections_csv_import WHERE Term_name > $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name = $currentTerm)
-        GROUP BY Section_id"
-
-    #now I need here term_name -lt $currentTerm but not in $currentTerm and not in > currentTerm.
-    $sections += Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name < $currentTerm AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE Term_name >= $currentTerm) GROUP BY Section_id"
-
-    #What about schools that have Terms other than (1,2,3,4) we can't simply ignore them. We are seeing schools with up to 8 terms with names like "R1,R2,R3" or "A1,A2,A3".
-    #Temporary patch is to pull anything else in that isn't in 1,2,3,4.  However, it doesn't "fix" the problem.
-    $sections += Invoke-SqlQuery -Query "SELECT * FROM sections_csv_import WHERE Term_name NOT IN (1,2,3,4)"
-
-    $sections | Export-CSV -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\sections.csv" -Force
 }
+
+<#
+    Sections
+#>
+Write-Host "Creating sections.csv file."
+Start-SqlTransaction
+$sections = [System.Collections.ArrayList]@()
+
+$digitTerms.Keys | ForEach-Object {
+
+    $digitTermsAlreadyQueried = @()
+    
+    $digitTerms.$PSitem | ForEach-Object {
+
+        Invoke-SqlQuery -Query (
+            "SELECT * FROM sections_csv_import
+            WHERE School_id = $($PSitem.School_id) AND Term_name = $($PSItem.Term_name)
+            AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE School_id = $($PSitem.School_id) AND Term_name IN (" + ($digitTermsAlreadyQueried -join ',') + "))"
+        ) | ForEach-Object {
+            $sections.Add($PSitem) | Out-Null
+        }
+            
+        $digitTermsAlreadyQueried += $PSitem.Term_name
+    }
+
+}
+
+$prefixTerms.Keys | ForEach-Object {
+        
+    $prefixTermsAlreadyQueried = @()
+
+    $prefixTerms.$PSitem | ForEach-Object {
+
+        Invoke-SqlQuery -Query (
+            "SELECT * FROM sections_csv_import
+            WHERE School_id = $($PSitem.School_id) AND Term_name =""$($PSItem.Term_name)""
+            AND Section_id NOT IN (SELECT Section_id FROM sections_csv_import WHERE School_id = $($PSitem.School_id) AND Term_name IN (""" + ($prefixTermsAlreadyQueried -join '","') + """))"
+        ) | ForEach-Object {
+            $sections.Add($PSitem) | Out-Null
+        }
+            
+        $prefixTermsAlreadyQueried += $PSitem.Term_name
+    }
+
+}
+
+Complete-SqlTransaction
+
+$sections | Export-CSV -UseQuotes AsNeeded -NoTypeInformation -Path "$PSScriptRoot\files\sections.csv" -Force
 
 Copy-Item $PSScriptRoot\downloads\schools.csv $PSScriptRoot\files\schools.csv -Force
 Copy-Item $PSScriptRoot\downloads\students.csv $PSScriptRoot\files\students.csv -Force
@@ -265,7 +365,10 @@ try {
     IF ($exec.ExitCode -ge 1) { Throw }
 } catch {
     write-Host "ERROR: Failed to properly upload files to clever." -ForegroundColor RED
+    Close-SqlConnection
     exit(3)
 }
+
+Close-SqlConnection
 
 exit

@@ -5,7 +5,9 @@ This script will pull from a persistent folder in Cognos so you no longer have t
 
 You will need the CognosModule from ````https://github.com/AR-k12code/CognosModule````. Please follow the installation process in the Readme.
 
-**DO NOT INSTALL THESE SCRIPTS TO A DOMAIN CONTROLLER.** Create a dedicated VM running Windows Server 2019 or Windows 10 Pro 1809+ for your automation scripts.
+**DO NOT INSTALL THESE SCRIPTS TO A DOMAIN CONTROLLER.**
+
+Create a dedicated VM running Windows Server 2019 or Windows 10 Pro 1809+ for your automation scripts.
 
 ## Requirements
 Git ````https://git-scm.com/download/win````
@@ -31,7 +33,7 @@ Copy-Item sample_settings.ps1 settings.ps1
 You will need to configure your Clever username and password. You can get that information from ````https://schools.clever.com/sync/settings````.
 
 ## Run
-Since this script is not trying to fix email addresses it does not need to have access to Active Directory. It can be run without saving the password in Task Scheduler. However, it must be run under the same local Windows user that encrypted the password for the CognosDownloader. I highly suggest this be a service account that will survive longer than you.
+Since this script is not trying to fix email addresses it does not need to have access to Active Directory. It can be run without saving the password in Task Scheduler. However, it must be run under the same local Windows user that encrypted the password for the CognosModule. I highly suggest this be a service account that will survive longer than you.
 
 Open a Powershell 7 window (pwsh.exe)
 ````
