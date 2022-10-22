@@ -1,5 +1,11 @@
 #Requires -Version 7.1
 #Requires -Modules SimplySQL,CognosModule
+
+Param(
+    [parameter(mandatory=$false)][switch]$SkipUpload,
+    [parameter(mandatory=$false)][switch]$SkipDownload
+)
+
 <#
 
 Clever Automation Script
@@ -66,60 +72,65 @@ if ([int](Get-Date -Format MM) -ge 7) {
     $schoolyear = [int](Get-Date -Format yyyy)
 }
 
-#Establish Session Only. Report parameter is required but we can provide a fake one for authentication only.
-try {
-    if (-Not($CognosConfigName)) {
-        $CognosConfigName = "DefaultConfig"
-    }
-    Connect-ToCognos -ConfigName $CognosConfigName
-} catch {
-    Write-Error "Failed to authenticate to Cognos."
-    exit 1
-}
+#process existing file on disk.
+if (-Not($SkipDownload)) {
 
-$reports = @{
-    'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' }
-    'schools' = @{ 'parameters' = ''; 'reportname' = 'schools' }
-    'sections' = @{ 'parameters' = "p_year=$schoolyear"; 'reportname' = 'sections' }
-    'students' = @{ 'parameters' = ''; 'reportname' = 'students_v2' }
-    'teachers' = @{ 'parameters' = ''; 'reportname' = 'teachers' }
-}
-
-$results = $reports.Keys | ForEach-Object -Parallel {
-    
-    #report title
-    $PSitem
-    
-    #pull in session to script block
-    $CognosSession = $using:CognosSession
-    $CognosDSN = $using:CognosDSN
-    $CognosProfile = $using:CognosProfile
-    $CognosUsername = $using:CognosUsername
-    
-    #Pull in properties for each hashtable key.
-    $options = ($using:reports).$PSItem
-
-    #Run Cognos Download using incoming options.
+    #Establish Session Only. Report parameter is required but we can provide a fake one for authentication only.
     try {
-        Save-CognosReport -report "$($options.reportname)" -cognosfolder "_Shared Data File Reports\Clever Files" -savepath "$using:PSScriptRoot\downloads" -reportparams "$($options.parameters)" -FileName "$($PSItem).csv" -TeamContent
+        if (-Not($CognosConfigName)) {
+            $CognosConfigName = "DefaultConfig"
+        }
+        Connect-ToCognos -ConfigName $CognosConfigName
     } catch {
-        Write-Output "$PSItem"
-        throw
+        Write-Error "Failed to authenticate to Cognos."
+        exit 1
     }
-    
-} -AsJob -ThrottleLimit 5 | Wait-Job #Please don't overload the Cognos Server.
 
-$results.ChildJobs | Where-Object { $PSItem.State -eq "Completed" } | Receive-Job
+    $reports = @{
+        'enrollments' = @{ 'parameters' = ''; 'reportname' = 'enrollments_markingperiod' }
+        'schools' = @{ 'parameters' = ''; 'reportname' = 'schools' }
+        'sections' = @{ 'parameters' = "p_year=$schoolyear"; 'reportname' = 'sections' }
+        'students' = @{ 'parameters' = ''; 'reportname' = 'students_v2' }
+        'teachers' = @{ 'parameters' = ''; 'reportname' = 'teachers' }
+    }
 
-#Output any failed jobs information.
-$failedJobs = $results.ChildJobs | Where-Object { $PSItem.State -ne "Completed" }
-$failedJobs | ForEach-Object {
-    $PSItem | Receive-Job
-}
+    $results = $reports.Keys | ForEach-Object -Parallel {
+        
+        #report title
+        $PSitem
+        
+        #pull in session to script block
+        $CognosSession = $using:CognosSession
+        $CognosDSN = $using:CognosDSN
+        $CognosProfile = $using:CognosProfile
+        $CognosUsername = $using:CognosUsername
+        
+        #Pull in properties for each hashtable key.
+        $options = ($using:reports).$PSItem
 
-if (($failedJobs | Measure-Object).count -ge 1) {
-    Write-Host "Failed running", (($failedJobs | Measure-Object).count), "jobs." -ForegroundColor RED
-    exit(2)
+        #Run Cognos Download using incoming options.
+        try {
+            Save-CognosReport -report "$($options.reportname)" -cognosfolder "_Shared Data File Reports\Clever Files" -savepath "$using:PSScriptRoot\downloads" -reportparams "$($options.parameters)" -FileName "$($PSItem).csv" -TeamContent
+        } catch {
+            Write-Output "$PSItem"
+            throw
+        }
+        
+    } -AsJob -ThrottleLimit 5 | Wait-Job #Please don't overload the Cognos Server.
+
+    $results.ChildJobs | Where-Object { $PSItem.State -eq "Completed" } | Receive-Job
+
+    #Output any failed jobs information.
+    $failedJobs = $results.ChildJobs | Where-Object { $PSItem.State -ne "Completed" }
+    $failedJobs | ForEach-Object {
+        $PSItem | Receive-Job
+    }
+
+    if (($failedJobs | Measure-Object).count -ge 1) {
+        Write-Host "Failed running", (($failedJobs | Measure-Object).count), "jobs." -ForegroundColor RED
+        exit(2)
+    }
+
 }
 
 #If full schedule then we need to build the sql tables and match enrollment to sections.
@@ -156,9 +167,8 @@ Start-SqlTransaction
 Invoke-SqlUpdate -Query '/* I need the terms to be grouped together to query later. Make a copy of the enrollments table with all terms grouped together. */
     REPLACE INTO `enrollments_grouped`
       SELECT School_id,Section_id,Student_id,group_concat(Marking_period,'''') as Terms
-      FROM enrollments_csv_import
-      GROUP BY Student_id,Section_id
-      ORDER BY Marking_period;' | Out-Null
+      FROM (SELECT * FROM enrollments_csv_import ORDER BY Marking_period)
+      GROUP BY Student_id,Section_id' | Out-Null
 
 Complete-SqlTransaction
 
