@@ -51,7 +51,7 @@ This must be done using the account you used to save your encrypted Cognos passw
     * Program/script = "c:\Program Files\PowerShell\7\pwsh.exe"
     * Add arguments = "-ExecutionPolicy bypass -File c:\scripts\clever\clever.ps1"
     * Start in = "c:\scripts\clever"
-
+** Quotes are not needed for add arguments or start in with Server 2022; may not be needed for other versions as well!
 
 ## Troubleshooting
 Review the clever-log.log file.
