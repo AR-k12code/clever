@@ -22,11 +22,14 @@ SimplySQL Powershell Module. (Installation instructions below.)
 Open Powershell 7 Administrative Shell
 ````
 Install-Module SimplySQL -Scope AllUsers -Force
+if(!(test-path -path c:\scripts)){
 mkdir c:\scripts
 cd \scripts
+}
 git clone https://github.com/AR-k12code/clever.git
 cd clever
 Copy-Item sample_settings.ps1 settings.ps1
+
 ````
 
 ## settings.ps1
