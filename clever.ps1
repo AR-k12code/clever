@@ -4,7 +4,7 @@
 
 Clever Automation Script
 Craig Millsap
-Gentry Public Schools/CAMTech Computer Services LLC
+CAMTech Computer Services LLC
  ___ _____ ___  ___   ___   ___    _  _  ___ _____         
 / __|_   _/ _ \| _ \ |   \ / _ \  | \| |/ _ \_   _|        
 \__ \ | || (_) |  _/ | |) | (_) | | .` | (_) || |          
@@ -28,7 +28,7 @@ project and would need to be run prior to this script.
 try { Start-Transcript "$PSScriptRoot\clever-log.log" -Force } catch {
     Stop-Transcript; Start-Transcript "$PSScriptRoot\clever-log.log" -Force
 }
-$cleverhostkey = '76:0c:bb:e5:f7:df:97:c3:f2:77:0d:9a:2e:d7:92:18'
+$cleverhostkey = "ecdsa-sha2-nistp256 256 76:0c:bb:e5:f7:df:97:c3:f2:77:0d:9a:2e:d7:92:18"
 
 #Check for SimplySQL Module
 try {
@@ -361,7 +361,7 @@ Copy-Item $PSScriptRoot\downloads\teachers.csv $PSScriptRoot\files\teachers.csv 
 try {
     if ($SkipUpload) { exit 0 }
     Write-Host "Info: Uploading files to Clever..." -ForegroundColor YELLOW
-    $exec = Start-Process -FilePath "$PSScriptRoot\bin\pscp.exe" -ArgumentList "-r -pw ""$cleverpassword"" -hostkey $cleverhostkey -batch $PSScriptRoot\files\ $($cleverusername)@sftp.clever.com:" -PassThru -Wait -NoNewWindow
+    $exec = Start-Process -FilePath "$PSScriptRoot\bin\pscp.exe" -ArgumentList "-r -pw ""$cleverpassword"" -hostkey $cleverhostkey -batch $PSScriptRoot\files\ $($cleverusername)@sftp2.clever.com:" -PassThru -Wait -NoNewWindow
     IF ($exec.ExitCode -ge 1) { Throw }
 } catch {
     write-Host "ERROR: Failed to properly upload files to clever." -ForegroundColor RED
